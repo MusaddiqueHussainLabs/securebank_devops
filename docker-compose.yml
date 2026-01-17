@@ -1,48 +1,85 @@
-version: "3.9"
-
 services:
 
-  jenkins:
-    image: jenkins/jenkins:lts
-    privileged: true
-    user: root
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./jenkins:/var/jenkins_home
-      - /var/run/docker.sock:/var/run/docker.sock
-
-  sonarqube:
-    image: sonarqube:lts
-    ports:
-      - "9000:9000"
-
-  registry:
-    image: registry:2
-    ports:
-      - "5000:5000"
-
   auth-service:
+    container_name: auth-service
     build:
       context: ./apps/auth-service
-      dockerfile: ../../docker/auth-service/Dockerfile
+      dockerfile: Dockerfile
+    image: securebank/auth-service:local
     ports:
-      - "8001:8000"
+      - "8000:8000"
+    environment:
+      - SERVICE_NAME=auth-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - securebank-net
 
   account-service:
+    container_name: account-service
     build:
       context: ./apps/account-service
+      dockerfile: Dockerfile
+    image: securebank/account-service:local
     ports:
-      - "8002:8000"
+      - "8001:8001"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    environment:
+      - SERVICE_NAME=account-service
+      - AUTH_SERVICE_URL=http://localhost:8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - securebank-net
 
   transaction-service:
+    container_name: transaction-service
     build:
       context: ./apps/transaction-service
+      dockerfile: Dockerfile
+    image: securebank/transaction-service:local
     ports:
-      - "8003:8000"
+      - "8002:8002"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    environment:
+      - SERVICE_NAME=transaction-service
+      - AUTH_SERVICE_URL=http://localhost:8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - securebank-net
 
   notification-service:
+    container_name: notification-service
     build:
       context: ./apps/notification-service
+      dockerfile: Dockerfile
+    image: securebank/notification-service:local
     ports:
-      - "8004:8000"
+      - "8003:8003"
+    environment:
+      - SERVICE_NAME=notification-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - securebank-net
+
+networks:
+  securebank-net:
+    driver: bridge
