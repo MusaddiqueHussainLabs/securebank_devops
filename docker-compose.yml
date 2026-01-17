@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+
+  jenkins:
+    image: jenkins/jenkins:lts
+    privileged: true
+    user: root
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./jenkins:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  sonarqube:
+    image: sonarqube:lts
+    ports:
+      - "9000:9000"
+
+  registry:
+    image: registry:2
+    ports:
+      - "5000:5000"
+
+  auth-service:
+    build:
+      context: ./apps/auth-service
+      dockerfile: ../../docker/auth-service/Dockerfile
+    ports:
+      - "8001:8000"
+
+  account-service:
+    build:
+      context: ./apps/account-service
+    ports:
+      - "8002:8000"
+
+  transaction-service:
+    build:
+      context: ./apps/transaction-service
+    ports:
+      - "8003:8000"
+
+  notification-service:
+    build:
+      context: ./apps/notification-service
+    ports:
+      - "8004:8000"
