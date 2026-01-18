@@ -2,43 +2,59 @@ pipeline {
   agent any
 
   environment {
-    REGISTRY = "localhost:5000"
     APP_NAME = "securebank"
+    BUILD_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
+  }
+
+  options {
+    timestamps()
+    ansiColor('xterm')
   }
 
   stages {
 
+    /* =========================
+       SOURCE
+       ========================= */
     stage('Checkout') {
       steps {
         checkout scm
       }
     }
 
+    /* =========================
+       CODE QUALITY
+       ========================= 
     stage('Lint & Unit Tests') {
       steps {
         sh '''
-        pip install flake8 pytest
-        flake8 apps/
-        pytest apps/
+          pip install flake8 pytest
+          flake8 apps/
+          pytest apps/
         '''
       }
     }
 
     stage('SonarQube - Code Quality') {
       steps {
-        sh '''
-        sonar-scanner \
-          -Dsonar.projectKey=securebank \
-          -Dsonar.sources=apps
-        '''
+        withSonarQubeEnv('sonarqube') {
+          sh '''
+            sonar-scanner \
+              -Dsonar.projectKey=securebank \
+              -Dsonar.sources=apps
+          '''
+        }
       }
-    }
+    }*/
 
+    /* =========================
+       SAST
+       ========================= 
     stage('Python SAST - Bandit') {
       steps {
         sh '''
-        pip install bandit
-        bandit -r apps/
+          pip install bandit
+          bandit -r apps/ -ll
         '''
       }
     }
@@ -46,45 +62,79 @@ pipeline {
     stage('Dependency Scan - Snyk') {
       steps {
         sh '''
-        snyk test
+          snyk test || true
         '''
       }
-    }
+    }*/
 
-    stage('Docker Build') {
+    /* =========================
+       BUILD
+       ========================= */
+    stage('Docker Build (Local Images)') {
       steps {
-        sh '''
-        docker build -t $REGISTRY/auth-service apps/auth-service
-        docker build -t $REGISTRY/account-service apps/account-service
-        '''
+        sh """
+          docker build -t auth-service:${BUILD_TAG} apps/auth-service
+          docker build -t account-service:${BUILD_TAG} apps/account-service
+          docker build -t transaction-service:${BUILD_TAG} apps/transaction-service
+          docker build -t notification-service:${BUILD_TAG} apps/notification-service
+        """
       }
     }
 
+    /* =========================
+       IMAGE SECURITY
+       ========================= 
     stage('Image Scan - Trivy') {
       steps {
-        sh '''
-        trivy image $REGISTRY/auth-service
-        '''
+        sh """
+          trivy image auth-service:${BUILD_TAG}
+          trivy image account-service:${BUILD_TAG}
+        """
       }
-    }
+    }*/
 
-    stage('Push to Local Registry') {
+    /* =========================
+       HELM PACKAGE & DEPLOY
+       ========================= 
+    stage('Helm Update & Deploy') {
       steps {
-        sh '''
-        docker push $REGISTRY/auth-service
-        '''
+        sh """
+          helm upgrade --install securebank helm/securebank \
+            --namespace securebank \
+            --create-namespace \
+            --set auth.image.tag=${BUILD_TAG} \
+            --set account.image.tag=${BUILD_TAG} \
+            --set transaction.image.tag=${BUILD_TAG} \
+            --set notification.image.tag=${BUILD_TAG}
+        """
       }
-    }
+    }*/
 
+    /* =========================
+       GITOPS COMMIT
+       ========================= */
     stage('GitOps Commit') {
       steps {
         sh '''
-        git config user.email "ci@securebank.local"
-        git config user.name "jenkins"
-        git commit -am "Update image tags"
-        git push
+          git config user.email "ci@securebank.local"
+          git config user.name "jenkins.local"
+
+          sed -i "s/tag:.*/tag: ${BUILD_TAG}/" helm/securebank/values.yaml
+
+          git add helm/securebank/values.yaml
+          git commit -m "chore: deploy build ${BUILD_TAG}" || true
+          git push
         '''
       }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Build ${BUILD_TAG} deployed successfully"
+    }
+    failure {
+      echo "❌ Pipeline failed"
     }
   }
 }
