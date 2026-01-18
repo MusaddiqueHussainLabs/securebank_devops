@@ -1,0 +1,4 @@
+helm repo add sysdig https://charts.sysdig.com
+helm install sysdig-agent sysdig/sysdig-agent \
+  --set sysdig.accessKey=FAKE_KEY \
+  -n sysdig --create-namespace
