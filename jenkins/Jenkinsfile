@@ -3,7 +3,7 @@ pipeline {
 
   environment {
     APP_NAME = "securebank"
-    BUILD_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
+    // BUILD_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
   }
 
   options {
@@ -21,6 +21,22 @@ pipeline {
         checkout scm
       }
     }
+
+    stage('Init Build Metadata') {
+        steps {
+            script {
+            env.SHORT_GIT_COMMIT = sh(
+                script: "git rev-parse --short HEAD",
+                returnStdout: true
+            ).trim()
+
+            env.BUILD_TAG = "${env.BUILD_NUMBER}-${env.SHORT_GIT_COMMIT}"
+
+            echo "Build tag set to: ${env.BUILD_TAG}"
+            }
+        }
+    }
+
 
     /* =========================
        CODE QUALITY
