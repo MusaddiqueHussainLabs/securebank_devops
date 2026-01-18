@@ -3,6 +3,7 @@ kind: Application
 metadata:
   name: securebank
 spec:
+  project: default
   source:
     repoURL: https://github.com/MusaddiqueHussainLabs/securebank_devops.git
     path: helm/securebank
