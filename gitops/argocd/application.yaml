@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: securebank
+spec:
+  source:
+    repoURL: https://github.com/MusaddiqueHussainLabs/securebank_devops.git
+    path: helm/securebank
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: securebank
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

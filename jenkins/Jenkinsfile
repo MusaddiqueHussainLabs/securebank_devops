@@ -1,0 +1,90 @@
+pipeline {
+  agent any
+
+  environment {
+    REGISTRY = "localhost:5000"
+    APP_NAME = "securebank"
+  }
+
+  stages {
+
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Lint & Unit Tests') {
+      steps {
+        sh '''
+        pip install flake8 pytest
+        flake8 apps/
+        pytest apps/
+        '''
+      }
+    }
+
+    stage('SonarQube - Code Quality') {
+      steps {
+        sh '''
+        sonar-scanner \
+          -Dsonar.projectKey=securebank \
+          -Dsonar.sources=apps
+        '''
+      }
+    }
+
+    stage('Python SAST - Bandit') {
+      steps {
+        sh '''
+        pip install bandit
+        bandit -r apps/
+        '''
+      }
+    }
+
+    stage('Dependency Scan - Snyk') {
+      steps {
+        sh '''
+        snyk test
+        '''
+      }
+    }
+
+    stage('Docker Build') {
+      steps {
+        sh '''
+        docker build -t $REGISTRY/auth-service apps/auth-service
+        docker build -t $REGISTRY/account-service apps/account-service
+        '''
+      }
+    }
+
+    stage('Image Scan - Trivy') {
+      steps {
+        sh '''
+        trivy image $REGISTRY/auth-service
+        '''
+      }
+    }
+
+    stage('Push to Local Registry') {
+      steps {
+        sh '''
+        docker push $REGISTRY/auth-service
+        '''
+      }
+    }
+
+    stage('GitOps Commit') {
+      steps {
+        sh '''
+        git config user.email "ci@securebank.local"
+        git config user.name "jenkins"
+        git commit -am "Update image tags"
+        git push
+        '''
+      }
+    }
+  }
+}
