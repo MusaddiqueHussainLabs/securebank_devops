@@ -1,6 +1,9 @@
 services:
   jenkins:
-    image: jenkins/jenkins:lts-jdk17
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: securebank/jenkins:latest
     container_name: securebank-jenkins
     privileged: true
     user: root
@@ -12,6 +15,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - securebank-ci
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
 
 volumes:
   jenkins_data:

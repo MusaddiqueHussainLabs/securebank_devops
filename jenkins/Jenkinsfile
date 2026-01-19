@@ -2,155 +2,52 @@ pipeline {
   agent any
 
   environment {
-    APP_NAME = "securebank"
-    // BUILD_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
-  }
-
-  options {
-    timestamps()
-    ansiColor('xterm')
+    K8S_NAMESPACE = "securebank"
+    HELM_RELEASE = "securebank"
   }
 
   stages {
 
-    /* =========================
-       SOURCE
-       ========================= */
-    stage('Checkout') {
+    stage('Init') {
       steps {
-        checkout scm
-      }
-    }
-
-    stage('Init Build Metadata') {
-        steps {
-            script {
-            env.SHORT_GIT_COMMIT = sh(
-                script: "git rev-parse --short HEAD",
-                returnStdout: true
-            ).trim()
-
-            env.BUILD_TAG = "${env.BUILD_NUMBER}-${env.SHORT_GIT_COMMIT}"
-
-            echo "Build tag set to: ${env.BUILD_TAG}"
-            }
+        script {
+          env.GIT_SHA = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+          env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_SHA}"
         }
-    }
-
-
-    /* =========================
-       CODE QUALITY
-       ========================= 
-    stage('Lint & Unit Tests') {
-      steps {
-        sh '''
-          pip install flake8 pytest
-          flake8 apps/
-          pytest apps/
-        '''
       }
     }
 
-    stage('SonarQube - Code Quality') {
+    stage('Build Images') {
       steps {
-        withSonarQubeEnv('sonarqube') {
+        sh """
+          docker build -t securebank/auth-service:${IMAGE_TAG} apps/auth-service
+          docker build -t securebank/account-service:${IMAGE_TAG} apps/account-service
+          docker build -t securebank/transaction-service:${IMAGE_TAG} apps/transaction-service
+          docker build -t securebank/notification-service:${IMAGE_TAG} apps/notification-service
+        """
+      }
+    }
+    
+    stage('GitOps Commit') {
+      steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'github-jenkins-creds',
+            usernameVariable: 'GIT_USER',
+            passwordVariable: 'GIT_TOKEN'
+        )]) {
           sh '''
-            sonar-scanner \
-              -Dsonar.projectKey=securebank \
-              -Dsonar.sources=apps
+                
+            git checkout main
+    
+            sed -i "s/tag:.*/tag: ${IMAGE_TAG}/" helm/securebank/values.yaml
+    
+            git add helm/securebank/values.yaml
+            git commit -m "chore: deploy build ${IMAGE_TAG}" || echo "No changes to commit"
+    
+            git push https://${GIT_USER}:${GIT_TOKEN}@github.com/MusaddiqueHussainLabs/securebank_devops.git main
           '''
         }
       }
-    }*/
-
-    /* =========================
-       SAST
-       ========================= 
-    stage('Python SAST - Bandit') {
-      steps {
-        sh '''
-          pip install bandit
-          bandit -r apps/ -ll
-        '''
-      }
-    }
-
-    stage('Dependency Scan - Snyk') {
-      steps {
-        sh '''
-          snyk test || true
-        '''
-      }
-    }*/
-
-    /* =========================
-       BUILD
-       ========================= */
-    stage('Docker Build (Local Images)') {
-      steps {
-        sh """
-          docker build -t auth-service:${BUILD_TAG} apps/auth-service
-          docker build -t account-service:${BUILD_TAG} apps/account-service
-          docker build -t transaction-service:${BUILD_TAG} apps/transaction-service
-          docker build -t notification-service:${BUILD_TAG} apps/notification-service
-        """
-      }
-    }
-
-    /* =========================
-       IMAGE SECURITY
-       ========================= 
-    stage('Image Scan - Trivy') {
-      steps {
-        sh """
-          trivy image auth-service:${BUILD_TAG}
-          trivy image account-service:${BUILD_TAG}
-        """
-      }
-    }*/
-
-    /* =========================
-       HELM PACKAGE & DEPLOY
-       ========================= 
-    stage('Helm Update & Deploy') {
-      steps {
-        sh """
-          helm upgrade --install securebank helm/securebank \
-            --namespace securebank \
-            --create-namespace \
-            --set auth.image.tag=${BUILD_TAG} \
-            --set account.image.tag=${BUILD_TAG} \
-            --set transaction.image.tag=${BUILD_TAG} \
-            --set notification.image.tag=${BUILD_TAG}
-        """
-      }
-    }*/
-
-    /* =========================
-       GITOPS COMMIT
-       ========================= */
-    stage('GitOps Commit') {
-      steps {
-        sh '''
-          git config user.email "ci@securebank.local"
-          git config user.name "jenkins.local"
-
-          sed -i "s/tag:.*/tag: ${BUILD_TAG}/" helm/securebank/values.yaml
-
-          git add helm/securebank/values.yaml
-          git commit -m "chore: deploy build ${BUILD_TAG}" || true
-          git push
-        '''
-      }
-    }
-  }
-
-  post {
-    success {
-      echo "✅ Build ${BUILD_TAG} deployed successfully"
-    }
-    failure {
-      echo "❌ Pipeline failed"
     }
   }
 }
