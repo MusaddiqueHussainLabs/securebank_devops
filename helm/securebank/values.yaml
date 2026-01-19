@@ -13,7 +13,7 @@ image:
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  # tag: 8-e96cd58
+  # tag: 10-dd94ee1
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
@@ -48,7 +48,7 @@ services:
     name: auth-service
     image:
       repository: securebank/auth-service
-      tag: 8-e96cd58
+      tag: 10-dd94ee1
       pullPolicy: IfNotPresent
     port: 8000
 
@@ -56,7 +56,7 @@ services:
     name: account-service
     image:
       repository: securebank/account-service
-      tag: 8-e96cd58
+      tag: 10-dd94ee1
       pullPolicy: IfNotPresent
     port: 8001
 
@@ -64,7 +64,7 @@ services:
     name: transaction-service
     image:
       repository: securebank/transaction-service
-      tag: 8-e96cd58
+      tag: 10-dd94ee1
       pullPolicy: IfNotPresent
     port: 8002
 
@@ -72,6 +72,6 @@ services:
     name: notification-service
     image:
       repository: securebank/notification-service
-      tag: 8-e96cd58
+      tag: 10-dd94ee1
       pullPolicy: IfNotPresent
     port: 8003
